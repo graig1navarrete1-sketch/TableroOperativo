@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tablero Operativo — Contadores de Eventos</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          colors: {
+            corporate: {
+              950: '#08182b',
+              900: '#0f294a',
+              800: '#163a66',
+              700: '#1e4d87',
+              100: '#e6eef8',
+            }
+          },
+          boxShadow: {
+            card: '0 10px 25px -5px rgba(15, 41, 74, 0.08), 0 4px 10px -3px rgba(15, 41, 74, 0.04)',
+            cardHover: '0 18px 32px -6px rgba(15, 41, 74, 0.13), 0 6px 14px -4px rgba(15, 41, 74, 0.06)',
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    /* Transiciones suaves y estética ejecutiva */
+    body {
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+    .kpi-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .kpi-card:hover {
+      transform: translateY(-2px);
+    }
+    .tabular-nums-strict {
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-blue-900 selection:text-white">
+  <!-- Contenedor principal -->
+  <div id="app-wrapper" class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+    <!-- Encabezado Ejecutivo -->
+    <header class="bg-corporate-900 text-white rounded-2xl shadow-card p-5 sm:p-7 mb-6 sm:mb-8 border border-corporate-800">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+        <!-- Título y subtítulo -->
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-corporate-800 text-emerald-300 text-xs font-semibold tracking-wide uppercase mb-2.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Actualización automática diaria
+          </div>
+          <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white">
+            Tablero Operativo de Control y Seguridad
+          </h1>
+          <p class="text-slate-300 text-sm sm:text-base mt-1">
+            Monitoreo automático de días transcurridos desde el último evento registrado
+          </p>
+        </div>
+
+        <!-- Fecha en vivo y controles -->
+        <div class="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3">
+          <div class="bg-corporate-950/70 border border-corporate-700/70 rounded-xl px-4 py-2.5 text-left sm:text-right w-full sm:w-auto">
+            <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+              Fecha actual del sistema
+            </div>
+            <div id="live-date-display" class="text-sm sm:text-base font-bold text-white capitalize mt-0.5">
+              Cargando fecha...
+            </div>
+            <div id="live-time-display" class="text-xs text-blue-200 tabular-nums-strict mt-0.5">
+              --:--:--
+            </div>
+          </div>
+
+          <!-- Botones discretos de acción -->
+          <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
+            <button
+              id="btn-copy-summary"
+              type="button"
+              onclick="copySummaryToClipboard()"
+              class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white transition shadow-sm cursor-pointer"
+              title="Copiar resumen actualizado para enviar por correo o chat"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span id="copy-btn-label">Copiar resumen</span>
+            </button>
+
+            <button
+              id="btn-toggle-edit"
+              type="button"
+              onclick="toggleEditPanel()"
+              class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-corporate-800 hover:bg-corporate-700 text-slate-100 border border-corporate-700 transition cursor-pointer"
+              title="Ajustar fechas base temporalmente"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>Editar fechas</span>
+            </button>
+
+            <button
+              id="btn-presentation"
+              type="button"
+              onclick="togglePresentationMode()"
+              class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-corporate-800 hover:bg-corporate-700 text-slate-100 border border-corporate-700 transition cursor-pointer"
+              title="Modo presentación para pantallas o proyectores"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+              <span id="presentation-btn-label">Modo presentación</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Notificación no intrusiva (reemplaza alert) -->
+    <div
+      id="status-banner"
+      class="hidden mb-6 rounded-xl px-4 py-3 text-sm font-medium border flex items-center justify-between gap-3 transition-all"
+      role="status"
+    >
+      <span id="status-banner-text"></span>
+      <button
+        type="button"
+        onclick="hideStatusBanner()"
+        class="text-xs font-bold uppercase tracking-wider opacity-75 hover:opacity-100 cursor-pointer"
+      >
+        Cerrar
+      </button>
+    </div>
+
+    <!-- Panel colapsable para editar fechas base -->
+    <section
+      id="edit-dates-panel"
+      class="hidden bg-white rounded-2xl shadow-card border border-slate-200 p-5 sm:p-6 mb-6 sm:mb-8"
+    >
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-5 border-b border-slate-100">
+        <div>
+          <h2 class="text-lg font-bold text-corporate-900">Configuración de Fechas Base</h2>
+          <p class="text-xs sm:text-sm text-slate-500">
+            Modifica las fechas si ocurre un nuevo evento. Al recargar la página se restauran los valores predeterminados del código.
+          </p>
+        </div>
+        <button
+          type="button"
+          onclick="resetDefaultDates()"
+          class="self-start sm:self-auto px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
+        >
+          Restaurar predeterminadas
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+          <label for="input-instruccion" class="block text-xs font-bold uppercase tracking-wider text-corporate-900 mb-2">
+            Último evento de instrucción
+          </label>
+          <input
+            id="input-instruccion"
+            type="date"
+            onchange="handleDateInputChange('instruccion', this.value)"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-corporate-700"
+          />
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+          <label for="input-intrusion" class="block text-xs font-bold uppercase tracking-wider text-corporate-900 mb-2">
+            Último evento de intrusión (PTG)
+          </label>
+          <input
+            id="input-intrusion"
+            type="date"
+            onchange="handleDateInputChange('intrusion', this.value)"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-corporate-700"
+          />
+        </div>
+
+        <div class="bg-slate-50 rounded-xl p-4 border border-slate-200">
+          <label for="input-perdida" class="block text-xs font-bold uppercase tracking-wider text-corporate-900 mb-2">
+            Último evento de pérdida
+          </label>
+          <input
+            id="input-perdida"
+            type="date"
+            onchange="handleDateInputChange('perdida', this.value)"
+            class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-corporate-700"
+          />
+        </div>
+      </div>
+    </section>
+
+    <!-- Grid Principal de Tarjetas KPI (3 tarjetas) -->
+    <main aria-label="Indicadores principales">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-7">
+
+        <!-- TARJETA 1: ÚLTIMO EVENTO DE INSTRUCCIÓN -->
+        <article class="kpi-card bg-white rounded-2xl shadow-card hover:shadow-cardHover border border-slate-200/90 overflow-hidden flex flex-col justify-between">
+          <div>
+            <!-- Barra superior corporativa -->
+            <div class="bg-corporate-900 px-6 py-4 flex items-center justify-between gap-2">
+              <span class="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">
+                Último evento de instrucción
+              </span>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-200 border border-blue-400/30">
+                Seguimiento
+              </span>
+            </div>
+
+            <!-- Cuerpo de la tarjeta -->
+            <div class="p-6 sm:p-7">
+              <div class="flex items-center justify-between text-xs sm:text-sm text-slate-500 font-medium mb-4">
+                <span>Registro de capacitación</span>
+                <span id="status-instruccion" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-semibold text-xs border border-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                  Activo al día
+                </span>
+              </div>
+
+              <!-- Contador principal -->
+              <div class="my-4 text-center bg-slate-50/90 rounded-2xl py-6 px-4 border border-slate-100">
+                <div id="days-instruccion" class="text-5xl sm:text-6xl font-extrabold text-corporate-900 tabular-nums-strict tracking-tight">
+                  635
+                </div>
+                <div class="text-sm sm:text-base font-semibold text-slate-600 mt-2">
+                  días transcurridos
+                </div>
+              </div>
+
+              <!-- Fecha del último evento visible -->
+              <div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-sm">
+                <span class="text-slate-500 font-medium">Fecha del último evento:</span>
+                <span id="date-label-instruccion" class="font-bold text-corporate-900 tabular-nums-strict text-base">
+                  27/02/2025
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Cálculo automático diario</span>
+            <span id="detail-instruccion" class="font-medium text-slate-600">Desde 27/02/2025</span>
+          </div>
+        </article>
+
+        <!-- TARJETA 2: INTRUSIONES EN PTG -->
+        <article class="kpi-card bg-white rounded-2xl shadow-card hover:shadow-cardHover border border-slate-200/90 overflow-hidden flex flex-col justify-between">
+          <div>
+            <!-- Barra superior corporativa -->
+            <div class="bg-corporate-900 px-6 py-4 flex items-center justify-between gap-2">
+              <span class="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">
+                Intrusiones en PTG
+              </span>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                Target: 0
+              </span>
+            </div>
+
+            <!-- Cuerpo de la tarjeta -->
+            <div class="p-6 sm:p-7">
+              <!-- Métricas de referencia Target y YTD -->
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-slate-50 rounded-xl px-3.5 py-2.5 border border-slate-200/80">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Target</div>
+                  <div class="text-lg font-extrabold text-corporate-900 tabular-nums-strict">0</div>
+                </div>
+                <div class="bg-emerald-50/70 rounded-xl px-3.5 py-2.5 border border-emerald-200/80">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-700">YTD</div>
+                  <div class="text-lg font-extrabold text-emerald-600 tabular-nums-strict">0</div>
+                </div>
+              </div>
+
+              <!-- Contador principal -->
+              <div class="my-3 text-center bg-emerald-50/40 rounded-2xl py-6 px-4 border border-emerald-100">
+                <div id="days-intrusion" class="text-5xl sm:text-6xl font-extrabold text-emerald-600 tabular-nums-strict tracking-tight">
+                  1412
+                </div>
+                <div class="text-sm sm:text-base font-bold text-slate-700 mt-2">
+                  Días sin intrusión
+                </div>
+              </div>
+
+              <!-- Estado y fecha base -->
+              <div class="mt-5 pt-4 border-t border-slate-100 space-y-2 text-sm">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-500 font-medium">Estado:</span>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Meta cumplida (0)
+                  </span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-500 font-medium">Último evento de intrusión:</span>
+                  <span id="date-label-intrusion" class="font-bold text-corporate-900 tabular-nums-strict text-base">
+                    12/01/2023
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Seguridad Física / PTG</span>
+            <span class="font-semibold text-emerald-700">YTD: 0 eventos</span>
+          </div>
+        </article>
+
+        <!-- TARJETA 3: PÉRDIDAS REGISTRADAS -->
+        <article class="kpi-card bg-white rounded-2xl shadow-card hover:shadow-cardHover border border-slate-200/90 overflow-hidden flex flex-col justify-between">
+          <div>
+            <!-- Barra superior corporativa -->
+            <div class="bg-corporate-900 px-6 py-4 flex items-center justify-between gap-2">
+              <span class="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">
+                Pérdidas registradas
+              </span>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                Target: 0
+              </span>
+            </div>
+
+            <!-- Cuerpo de la tarjeta -->
+            <div class="p-6 sm:p-7">
+              <!-- Métricas de referencia Target y YTD -->
+              <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-slate-50 rounded-xl px-3.5 py-2.5 border border-slate-200/80">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Target</div>
+                  <div class="text-lg font-extrabold text-corporate-900 tabular-nums-strict">0</div>
+                </div>
+                <div class="bg-emerald-50/70 rounded-xl px-3.5 py-2.5 border border-emerald-200/80">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-emerald-700">YTD</div>
+                  <div class="text-lg font-extrabold text-emerald-600 tabular-nums-strict">0 / 0 KUSD</div>
+                </div>
+              </div>
+
+              <!-- Contador principal -->
+              <div class="my-3 text-center bg-emerald-50/40 rounded-2xl py-6 px-4 border border-emerald-100">
+                <div id="days-perdida" class="text-5xl sm:text-6xl font-extrabold text-emerald-600 tabular-nums-strict tracking-tight">
+                  1639
+                </div>
+                <div class="text-sm sm:text-base font-bold text-slate-700 mt-2">
+                  Días sin pérdidas
+                </div>
+              </div>
+
+              <!-- Estado y fecha base -->
+              <div class="mt-5 pt-4 border-t border-slate-100 space-y-2 text-sm">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-500 font-medium">Estado:</span>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    Meta cumplida (0 KUSD)
+                  </span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-500 font-medium">Último evento de pérdida:</span>
+                  <span id="date-label-perdida" class="font-bold text-corporate-900 tabular-nums-strict text-base">
+                    30/05/2022
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Control Operativo y Financiero</span>
+            <span class="font-semibold text-emerald-700">YTD: 0 / 0 KUSD</span>
+          </div>
+        </article>
+
+      </div>
+    </main>
+
+    <!-- Pie informativo discreto -->
+    <footer class="mt-8 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 px-1">
+      <div>
+        Los contadores se calculan automáticamente al cargar la página comparando la fecha actual del sistema con cada fecha base.
+      </div>
+      <div id="footer-sync-info" class="font-medium text-slate-600">
+        Sincronizado con el reloj del equipo
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // =========================================================================
+    // CONFIGURACIÓN PREDETERMINADA DE FECHAS BASE (ISO YYYY-MM-DD)
+    // =========================================================================
+    const DEFAULT_DATES = Object.freeze({
+      instruccion: '2025-02-27', // 27/02/2025 -> 635 días al 24/11/2026
+      intrusion: '2023-01-12',   // 12/01/2023 -> 1412 días al 24/11/2026
+      perdida: '2022-05-30'      // 30/05/2022 -> 1639 días al 24/11/2026
+    });
+
+    // Estado activo de fechas (inicia siempre con los valores predeterminados)
+    let activeDates = { ...DEFAULT_DATES };
+    let isPresentationMode = false;
+
+    /**
+     * Convierte una cadena 'YYYY-MM-DD' a un objeto Date en medianoche UTC local segura
+     * evitando desfases por zona horaria o horario de verano (DST).
+     */
+    function parseISODateToUTCDate(isoStr) {
+      if (!isoStr || typeof isoStr !== 'string') return null;
+      const parts = isoStr.trim().split('-');
+      if (parts.length !== 3) return null;
+
+      const year = Number(parts[0]);
+      const month = Number(parts[1]);
+      const day = Number(parts[2]);
+
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+        return null;
+      }
+
+      const utcDate = new Date(Date.UTC(year, month - 1, day));
+      // Validar que la fecha construida coincida con los componentes (ej. evitar 31/02)
+      if (
+        utcDate.getUTCFullYear() !== year ||
+        utcDate.getUTCMonth() !== month - 1 ||
+        utcDate.getUTCDate() !== day
+      ) {
+        return null;
+      }
+      return utcDate;
+    }
+
+    /**
+     * Obtiene la fecha actual del sistema normalizada a medianoche UTC
+     * para calcular días calendario exactos sin problemas de DST.
+     */
+    function getTodayUTCDate() {
+      const now = new Date();
+      return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    }
+
+    /**
+     * Calcula los días enteros transcurridos desde baseIsoStr hasta hoy.
+     * Retorna null si la fecha no es válida.
+     */
+    function calculateDaysElapsed(baseIsoStr) {
+      const baseDate = parseISODateToUTCDate(baseIsoStr);
+      if (!baseDate) return null;
+
+      const todayUTC = getTodayUTCDate();
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const diffDays = Math.floor((todayUTC.getTime() - baseDate.getTime()) / msPerDay);
+      return diffDays;
+    }
+
+    /**
+     * Formatea 'YYYY-MM-DD' como 'DD/MM/YYYY'.
+     */
+    function formatToDDMMYYYY(isoStr) {
+      const parsed = parseISODateToUTCDate(isoStr);
+      if (!parsed) return '--/--/----';
+      const dd = String(parsed.getUTCDate()).padStart(2, '0');
+      const mm = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+      const yyyy = parsed.getUTCFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    }
+
+    /**
+     * Actualiza la fecha y hora del sistema mostrada en el encabezado.
+     */
+    function updateSystemClock() {
+      const now = new Date();
+
+      const dateFormatter = new Intl.DateTimeFormat('es-ES', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      const timeFormatter = new Intl.DateTimeFormat('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      const dateEl = document.getElementById('live-date-display');
+      const timeEl = document.getElementById('live-time-display');
+
+      if (dateEl) dateEl.textContent = dateFormatter.format(now);
+      if (timeEl) timeEl.textContent = `Hora local: ${timeFormatter.format(now)}`;
+    }
+
+    /**
+     * Recalcula y renderiza todos los contadores y etiquetas de fechas en las tarjetas.
+     */
+    function renderAllCounters() {
+      try {
+        // 1. Último evento de instrucción
+        const daysInstruccion = calculateDaysElapsed(activeDates.instruccion);
+        const daysInstruccionEl = document.getElementById('days-instruccion');
+        const dateLabelInstruccionEl = document.getElementById('date-label-instruccion');
+        const detailInstruccionEl = document.getElementById('detail-instruccion');
+
+        if (daysInstruccionEl) {
+          daysInstruccionEl.textContent = daysInstruccion !== null ? String(daysInstruccion) : '—';
+        }
+        if (dateLabelInstruccionEl) {
+          dateLabelInstruccionEl.textContent = formatToDDMMYYYY(activeDates.instruccion);
+        }
+        if (detailInstruccionEl) {
+          detailInstruccionEl.textContent = `Desde ${formatToDDMMYYYY(activeDates.instruccion)}`;
+        }
+
+        // 2. Intrusiones en PTG
+        const daysIntrusion = calculateDaysElapsed(activeDates.intrusion);
+        const daysIntrusionEl = document.getElementById('days-intrusion');
+        const dateLabelIntrusionEl = document.getElementById('date-label-intrusion');
+
+        if (daysIntrusionEl) {
+          daysIntrusionEl.textContent = daysIntrusion !== null ? String(daysIntrusion) : '—';
+        }
+        if (dateLabelIntrusionEl) {
+          dateLabelIntrusionEl.textContent = formatToDDMMYYYY(activeDates.intrusion);
+        }
+
+        // 3. Pérdidas registradas
+        const daysPerdida = calculateDaysElapsed(activeDates.perdida);
+        const daysPerdidaEl = document.getElementById('days-perdida');
+        const dateLabelPerdidaEl = document.getElementById('date-label-perdida');
+
+        if (daysPerdidaEl) {
+          daysPerdidaEl.textContent = daysPerdida !== null ? String(daysPerdida) : '—';
+        }
+        if (dateLabelPerdidaEl) {
+          dateLabelPerdidaEl.textContent = formatToDDMMYYYY(activeDates.perdida);
+        }
+
+        // Sincronizar valores en los inputs de edición si existen
+        const inputInst = document.getElementById('input-instruccion');
+        const inputIntr = document.getElementById('input-intrusion');
+        const inputPerd = document.getElementById('input-perdida');
+        if (inputInst) inputInst.value = activeDates.instruccion;
+        if (inputIntr) inputIntr.value = activeDates.intrusion;
+        if (inputPerd) inputPerd.value = activeDates.perdida;
+      } catch (err) {
+        showStatusBanner('Ocurrió un error al calcular los contadores.', 'error');
+      }
+    }
+
+    /**
+     * Muestra un banner de estado limpio (sin usar alert()).
+     */
+    function showStatusBanner(message, type = 'info') {
+      const banner = document.getElementById('status-banner');
+      const bannerText = document.getElementById('status-banner-text');
+      if (!banner || !bannerText) return;
+
+      banner.classList.remove(
+        'hidden',
+        'bg-emerald-50', 'text-emerald-900', 'border-emerald-200',
+        'bg-amber-50', 'text-amber-900', 'border-amber-200',
+        'bg-rose-50', 'text-rose-900', 'border-rose-200'
+      );
+
+      if (type === 'success') {
+        banner.classList.add('bg-emerald-50', 'text-emerald-900', 'border-emerald-200');
+      } else if (type === 'error') {
+        banner.classList.add('bg-rose-50', 'text-rose-900', 'border-rose-200');
+      } else {
+        banner.classList.add('bg-amber-50', 'text-amber-900', 'border-amber-200');
+      }
+
+      bannerText.textContent = message;
+    }
+
+    function hideStatusBanner() {
+      const banner = document.getElementById('status-banner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    /**
+     * Alterna la visibilidad del panel de edición de fechas base.
+     */
+    function toggleEditPanel() {
+      const panel = document.getElementById('edit-dates-panel');
+      if (!panel) return;
+      panel.classList.toggle('hidden');
+    }
+
+    /**
+     * Maneja cambios en los campos de fecha del panel de edición.
+     */
+    function handleDateInputChange(key, newIsoValue) {
+      if (!parseISODateToUTCDate(newIsoValue)) {
+        showStatusBanner('Por favor ingresa una fecha válida.', 'error');
+        return;
+      }
+      activeDates[key] = newIsoValue;
+      renderAllCounters();
+      showStatusBanner('Contadores actualizados con la nueva fecha base.', 'success');
+    }
+
+    /**
+     * Restaura las fechas predeterminadas definidas en código.
+     */
+    function resetDefaultDates() {
+      activeDates = { ...DEFAULT_DATES };
+      renderAllCounters();
+      showStatusBanner('Se restauraron las fechas base predeterminadas.', 'success');
+    }
+
+    /**
+     * Alterna el modo presentación para pantallas grandes o proyectores.
+     */
+    function togglePresentationMode() {
+      isPresentationMode = !isPresentationMode;
+      const wrapper = document.getElementById('app-wrapper');
+      const label = document.getElementById('presentation-btn-label');
+
+      if (wrapper) {
+        if (isPresentationMode) {
+          wrapper.classList.remove('max-w-7xl');
+          wrapper.classList.add('max-w-full');
+        } else {
+          wrapper.classList.remove('max-w-full');
+          wrapper.classList.add('max-w-7xl');
+        }
+      }
+
+      if (label) {
+        label.textContent = isPresentationMode ? 'Salir de presentación' : 'Modo presentación';
+      }
+    }
+
+    /**
+     * Construye un resumen ejecutivo en texto plano con los valores actuales.
+     */
+    function buildSummaryText() {
+      const nowFormatted = formatToDDMMYYYY(
+        new Date().toISOString().slice(0, 10)
+      );
+      const dInst = calculateDaysElapsed(activeDates.instruccion);
+      const dIntr = calculateDaysElapsed(activeDates.intrusion);
+      const dPerd = calculateDaysElapsed(activeDates.perdida);
+
+      return [
+        `TABLERO OPERATIVO — ACTUALIZACIÓN AL ${nowFormatted}`,
+        `• Último evento de instrucción (${formatToDDMMYYYY(activeDates.instruccion)}): ${dInst} días`,
+        `• Intrusiones en PTG (Target: 0 | YTD: 0) — Último evento (${formatToDDMMYYYY(activeDates.intrusion)}): ${dIntr} días sin intrusión`,
+        `• Pérdidas registradas (Target: 0 | YTD: 0 / 0 KUSD) — Último evento (${formatToDDMMYYYY(activeDates.perdida)}): ${dPerd} días sin pérdidas`
+      ].join('\n');
+    }
+
+    /**
+     * Copia el resumen al portapapeles utilizando execCommand('copy') para compatibilidad en iFrames.
+     */
+    function copySummaryToClipboard() {
+      const summary = buildSummaryText();
+      const labelEl = document.getElementById('copy-btn-label');
+
+      try {
+        const tempTextarea = document.createElement('textarea');
+        tempTextarea.value = summary;
+        tempTextarea.setAttribute('readonly', '');
+        tempTextarea.style.position = 'fixed';
+        tempTextarea.style.left = '-9999px';
+        document.body.appendChild(tempTextarea);
+        tempTextarea.select();
+
+        const successful = document.execCommand('copy');
+        document.body.removeChild(tempTextarea);
+
+        if (successful) {
+          if (labelEl) labelEl.textContent = '¡Copiado!';
+          showStatusBanner('Resumen copiado al portapapeles listo para compartir.', 'success');
+          setTimeout(() => {
+            if (labelEl) labelEl.textContent = 'Copiar resumen';
+          }, 2200);
+        } else {
+          showStatusBanner('No se pudo copiar automáticamente. Selecciona el texto manualmente.', 'error');
+        }
+      } catch (err) {
+        showStatusBanner('No se pudo copiar al portapapeles en este entorno.', 'error');
+      }
+    }
+
+    // Inicialización al cargar la página
+    window.addEventListener('DOMContentLoaded', () => {
+      updateSystemClock();
+      renderAllCounters();
+      setInterval(updateSystemClock, 1000);
+    });
+  </script>
+</body>
+</html>
