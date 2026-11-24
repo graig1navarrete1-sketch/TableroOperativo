@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -59,7 +60,7 @@
         <div>
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-corporate-800 text-emerald-300 text-xs font-semibold tracking-wide uppercase mb-2.5">
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            Actualización automática diaria
+            Sincronización en tiempo real · PIN activo
           </div>
           <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white">
             Tablero Operativo de Control y Seguridad
@@ -103,7 +104,7 @@
               type="button"
               onclick="toggleEditPanel()"
               class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-corporate-800 hover:bg-corporate-700 text-slate-100 border border-corporate-700 transition cursor-pointer"
-              title="Ajustar fechas base temporalmente"
+              title="Ajustar fechas base con PIN de autorización"
             >
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -153,7 +154,7 @@
         <div>
           <h2 class="text-lg font-bold text-corporate-900">Configuración de Fechas Base</h2>
           <p class="text-xs sm:text-sm text-slate-500">
-            Modifica las fechas si ocurre un nuevo evento. Al recargar la página se restauran los valores predeterminados del código.
+            Al guardar un cambio se solicita el PIN de 4 dígitos y se sincroniza en Firebase para todos los usuarios.
           </p>
         </div>
         <button
@@ -390,29 +391,46 @@
         Los contadores se calculan automáticamente al cargar la página comparando la fecha actual del sistema con cada fecha base.
       </div>
       <div id="footer-sync-info" class="font-medium text-slate-600">
-        Sincronizado con el reloj del equipo
+        Conectando con Firebase Realtime Database...
       </div>
     </footer>
   </div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+
     // =========================================================================
-    // CONFIGURACIÓN PREDETERMINADA DE FECHAS BASE (ISO YYYY-MM-DD)
+    // CONFIGURACIÓN PREDETERMINADA DE FECHAS BASE (ISO YYYY-MM-DD) Y PIN
     // =========================================================================
+    const SUPERVISOR_PIN = '9126';
+    const DB_PATH = 'tablero_operativo';
+
     const DEFAULT_DATES = Object.freeze({
       instruccion: '2025-02-27', // 27/02/2025 -> 635 días al 24/11/2026
       intrusion: '2023-01-12',   // 12/01/2023 -> 1412 días al 24/11/2026
       perdida: '2022-05-30'      // 30/05/2022 -> 1639 días al 24/11/2026
     });
 
-    // Estado activo de fechas (inicia siempre con los valores predeterminados)
+    const firebaseConfig = {
+      apiKey: "AIzaSyAKdyihuaKqUqLSyKPvOOzo11WyxFk1Lh8",
+      authDomain: "control-operativo-d6a3f.firebaseapp.com",
+      databaseURL: "https://control-operativo-d6a3f-default-rtdb.firebaseio.com",
+      projectId: "control-operativo-d6a3f",
+      storageBucket: "control-operativo-d6a3f.firebasestorage.app",
+      messagingSenderId: "6599572866",
+      appId: "1:6599572866:web:9dc3f581adb8602a17639b",
+      measurementId: "G-BE5SJLGTLZ"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const datesRef = ref(db, DB_PATH);
+
+    // Estado activo de fechas
     let activeDates = { ...DEFAULT_DATES };
     let isPresentationMode = false;
 
-    /**
-     * Convierte una cadena 'YYYY-MM-DD' a un objeto Date en medianoche UTC local segura
-     * evitando desfases por zona horaria o horario de verano (DST).
-     */
     function parseISODateToUTCDate(isoStr) {
       if (!isoStr || typeof isoStr !== 'string') return null;
       const parts = isoStr.trim().split('-');
@@ -427,7 +445,6 @@
       }
 
       const utcDate = new Date(Date.UTC(year, month - 1, day));
-      // Validar que la fecha construida coincida con los componentes (ej. evitar 31/02)
       if (
         utcDate.getUTCFullYear() !== year ||
         utcDate.getUTCMonth() !== month - 1 ||
@@ -438,32 +455,20 @@
       return utcDate;
     }
 
-    /**
-     * Obtiene la fecha actual del sistema normalizada a medianoche UTC
-     * para calcular días calendario exactos sin problemas de DST.
-     */
     function getTodayUTCDate() {
       const now = new Date();
       return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
     }
 
-    /**
-     * Calcula los días enteros transcurridos desde baseIsoStr hasta hoy.
-     * Retorna null si la fecha no es válida.
-     */
     function calculateDaysElapsed(baseIsoStr) {
       const baseDate = parseISODateToUTCDate(baseIsoStr);
       if (!baseDate) return null;
 
       const todayUTC = getTodayUTCDate();
       const msPerDay = 1000 * 60 * 60 * 24;
-      const diffDays = Math.floor((todayUTC.getTime() - baseDate.getTime()) / msPerDay);
-      return diffDays;
+      return Math.floor((todayUTC.getTime() - baseDate.getTime()) / msPerDay);
     }
 
-    /**
-     * Formatea 'YYYY-MM-DD' como 'DD/MM/YYYY'.
-     */
     function formatToDDMMYYYY(isoStr) {
       const parsed = parseISODateToUTCDate(isoStr);
       if (!parsed) return '--/--/----';
@@ -473,9 +478,6 @@
       return `${dd}/${mm}/${yyyy}`;
     }
 
-    /**
-     * Actualiza la fecha y hora del sistema mostrada en el encabezado.
-     */
     function updateSystemClock() {
       const now = new Date();
 
@@ -500,12 +502,8 @@
       if (timeEl) timeEl.textContent = `Hora local: ${timeFormatter.format(now)}`;
     }
 
-    /**
-     * Recalcula y renderiza todos los contadores y etiquetas de fechas en las tarjetas.
-     */
     function renderAllCounters() {
       try {
-        // 1. Último evento de instrucción
         const daysInstruccion = calculateDaysElapsed(activeDates.instruccion);
         const daysInstruccionEl = document.getElementById('days-instruccion');
         const dateLabelInstruccionEl = document.getElementById('date-label-instruccion');
@@ -521,7 +519,6 @@
           detailInstruccionEl.textContent = `Desde ${formatToDDMMYYYY(activeDates.instruccion)}`;
         }
 
-        // 2. Intrusiones en PTG
         const daysIntrusion = calculateDaysElapsed(activeDates.intrusion);
         const daysIntrusionEl = document.getElementById('days-intrusion');
         const dateLabelIntrusionEl = document.getElementById('date-label-intrusion');
@@ -533,7 +530,6 @@
           dateLabelIntrusionEl.textContent = formatToDDMMYYYY(activeDates.intrusion);
         }
 
-        // 3. Pérdidas registradas
         const daysPerdida = calculateDaysElapsed(activeDates.perdida);
         const daysPerdidaEl = document.getElementById('days-perdida');
         const dateLabelPerdidaEl = document.getElementById('date-label-perdida');
@@ -545,7 +541,6 @@
           dateLabelPerdidaEl.textContent = formatToDDMMYYYY(activeDates.perdida);
         }
 
-        // Sincronizar valores en los inputs de edición si existen
         const inputInst = document.getElementById('input-instruccion');
         const inputIntr = document.getElementById('input-intrusion');
         const inputPerd = document.getElementById('input-perdida');
@@ -557,9 +552,6 @@
       }
     }
 
-    /**
-     * Muestra un banner de estado limpio (sin usar alert()).
-     */
     function showStatusBanner(message, type = 'info') {
       const banner = document.getElementById('status-banner');
       const bannerText = document.getElementById('status-banner-text');
@@ -588,40 +580,69 @@
       if (banner) banner.classList.add('hidden');
     }
 
-    /**
-     * Alterna la visibilidad del panel de edición de fechas base.
-     */
+    function verifySupervisorPin() {
+      const enteredPin = window.prompt('Ingresa el PIN de 4 dígitos para autorizar cambios en las fechas:');
+      if (enteredPin === null) {
+        renderAllCounters();
+        showStatusBanner('Cambio cancelado: no se ingresó el PIN.', 'info');
+        return false;
+      }
+      if (enteredPin.trim() !== SUPERVISOR_PIN) {
+        renderAllCounters();
+        showStatusBanner('PIN incorrecto. No se guardaron los cambios.', 'error');
+        return false;
+      }
+      return true;
+    }
+
+    async function saveDatesToFirebase(nextDates, successMessage) {
+      try {
+        await set(datesRef, nextDates);
+        activeDates = { ...nextDates };
+        renderAllCounters();
+        showStatusBanner(successMessage, 'success');
+      } catch (err) {
+        activeDates = { ...nextDates };
+        renderAllCounters();
+        showStatusBanner('Se actualizó en pantalla, pero hubo un error al guardar en Firebase.', 'error');
+      }
+    }
+
     function toggleEditPanel() {
       const panel = document.getElementById('edit-dates-panel');
       if (!panel) return;
       panel.classList.toggle('hidden');
     }
 
-    /**
-     * Maneja cambios en los campos de fecha del panel de edición.
-     */
-    function handleDateInputChange(key, newIsoValue) {
+    async function handleDateInputChange(key, newIsoValue) {
       if (!parseISODateToUTCDate(newIsoValue)) {
+        renderAllCounters();
         showStatusBanner('Por favor ingresa una fecha válida.', 'error');
         return;
       }
-      activeDates[key] = newIsoValue;
-      renderAllCounters();
-      showStatusBanner('Contadores actualizados con la nueva fecha base.', 'success');
+
+      if (!verifySupervisorPin()) return;
+
+      const updatedDates = {
+        ...activeDates,
+        [key]: newIsoValue
+      };
+
+      await saveDatesToFirebase(
+        updatedDates,
+        'Fecha actualizada y sincronizada en tiempo real con Firebase.'
+      );
     }
 
-    /**
-     * Restaura las fechas predeterminadas definidas en código.
-     */
-    function resetDefaultDates() {
-      activeDates = { ...DEFAULT_DATES };
-      renderAllCounters();
-      showStatusBanner('Se restauraron las fechas base predeterminadas.', 'success');
+    async function resetDefaultDates() {
+      if (!verifySupervisorPin()) return;
+
+      await saveDatesToFirebase(
+        { ...DEFAULT_DATES },
+        'Se restauraron las fechas base predeterminadas en Firebase.'
+      );
     }
 
-    /**
-     * Alterna el modo presentación para pantallas grandes o proyectores.
-     */
     function togglePresentationMode() {
       isPresentationMode = !isPresentationMode;
       const wrapper = document.getElementById('app-wrapper');
@@ -642,9 +663,6 @@
       }
     }
 
-    /**
-     * Construye un resumen ejecutivo en texto plano con los valores actuales.
-     */
     function buildSummaryText() {
       const nowFormatted = formatToDDMMYYYY(
         new Date().toISOString().slice(0, 10)
@@ -661,9 +679,6 @@
       ].join('\n');
     }
 
-    /**
-     * Copia el resumen al portapapeles utilizando execCommand('copy') para compatibilidad en iFrames.
-     */
     function copySummaryToClipboard() {
       const summary = buildSummaryText();
       const labelEl = document.getElementById('copy-btn-label');
@@ -694,10 +709,56 @@
       }
     }
 
+    // Exponer funciones usadas por atributos onclick / onchange del HTML
+    window.copySummaryToClipboard = copySummaryToClipboard;
+    window.toggleEditPanel = toggleEditPanel;
+    window.togglePresentationMode = togglePresentationMode;
+    window.hideStatusBanner = hideStatusBanner;
+    window.resetDefaultDates = resetDefaultDates;
+    window.handleDateInputChange = handleDateInputChange;
+
+    // Suscripción en tiempo real a Firebase Realtime Database
+    function startRealtimeListener() {
+      const footerSyncEl = document.getElementById('footer-sync-info');
+
+      onValue(
+        datesRef,
+        (snapshot) => {
+          const data = snapshot.val();
+          if (
+            data &&
+            parseISODateToUTCDate(data.instruccion) &&
+            parseISODateToUTCDate(data.intrusion) &&
+            parseISODateToUTCDate(data.perdida)
+          ) {
+            activeDates = {
+              instruccion: data.instruccion,
+              intrusion: data.intrusion,
+              perdida: data.perdida
+            };
+          } else {
+            activeDates = { ...DEFAULT_DATES };
+          }
+          renderAllCounters();
+          if (footerSyncEl) {
+            footerSyncEl.textContent = 'Sincronizado en vivo con Firebase · PIN activo';
+          }
+        },
+        () => {
+          activeDates = { ...DEFAULT_DATES };
+          renderAllCounters();
+          if (footerSyncEl) {
+            footerSyncEl.textContent = 'Modo local activo (reloj del equipo)';
+          }
+        }
+      );
+    }
+
     // Inicialización al cargar la página
     window.addEventListener('DOMContentLoaded', () => {
       updateSystemClock();
       renderAllCounters();
+      startRealtimeListener();
       setInterval(updateSystemClock, 1000);
     });
   </script>
